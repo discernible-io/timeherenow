@@ -19,6 +19,9 @@ A comprehensive Node.js SDK for implementing RODiT-based mutual authentication, 
 - [Performance Tracking](#performance-tracking)
 - [Webhooks](#webhooks)
 - [Advanced Usage](#advanced-usage)
+  - [Portal Authentication](#portal-authentication-server-to-server)
+  - [SignPortal URL Configuration](#signportal-url-configuration)
+  - [CRUDA Operations Example](#cruda-operations-example)
 - [API Reference](#api-reference)
 - [Best Practices](#best-practices)
 - [Troubleshooting](#troubleshooting)
@@ -1143,6 +1146,136 @@ router.post('/signclient', authenticate, authorize, async (req, res) => {
 });
 
 module.exports = router;
+```
+
+### SignPortal URL Configuration
+
+#### Overview
+
+When performing server-to-server authentication with SignPortal (e.g., minting client tokens), the SDK automatically constructs the SignPortal URL from the `serviceprovider_id` field in your RODiT token metadata.
+
+#### Smart Contract Name Format
+
+The SignPortal URL is derived from the smart contract component (`sc=`) in your `serviceprovider_id`. The SDK supports two formats:
+
+**Standard Format (3+ components):**
+```
+sc=<number>-<domain>-<tld>.near
+```
+
+Example:
+```
+serviceprovider_id: "bc=near.org;sc=10975-discernible-org.near;id=..."
+```
+
+Parsing:
+- Split by `.`: `["10975-discernible-org", "near"]`
+- Take first part: `10975-discernible-org`
+- Split by `-`: `["10975", "discernible", "org"]`
+- Extract domain: `discernible` (index 1)
+- Extract TLD: `org` (index 2)
+- **Result**: `https://signportal.discernible.org:8443`
+
+**Alternative Format (2 components):**
+```
+sc=<domain>-<tld>.near
+```
+
+Example:
+```
+serviceprovider_id: "bc=near.org;sc=roditcorp-com.near;id=..."
+```
+
+Parsing:
+- Split by `.`: `["roditcorp-com", "near"]`
+- Take first part: `roditcorp-com`
+- Split by `-`: `["roditcorp", "com"]`
+- Extract domain: `roditcorp` (index 0)
+- Extract TLD: `com` (index 1)
+- **Result**: `https://signportal.roditcorp.com:8443`
+
+#### serviceprovider_id Structure
+
+The complete `serviceprovider_id` format:
+```
+bc=<blockchain>;sc=<smart-contract>;id=<identifier>[;id=<additional-id>]
+```
+
+Components:
+- `bc=` - Blockchain identifier (e.g., `near.org`)
+- `sc=` - Smart contract name (used to construct SignPortal URL)
+- `id=` - One or more identifier components
+
+Example:
+```json
+{
+  "serviceprovider_id": "bc=near.org;sc=roditcorp-com.near;id=01K8QECHMKFVNWQ54PJ2W2GMA7;id=01K8QECHMM1214VMDHSH7JM6H8"
+}
+```
+
+#### URL Construction Method
+
+The SDK uses `roditClient.getPortalUrl(serviceProviderId, port)` to construct the SignPortal URL:
+
+```javascript
+const client = req.app.locals.roditClient;
+const configObject = await client.getConfigOwnRodit();
+const serviceProviderId = configObject.own_rodit.metadata.serviceprovider_id;
+const portalPort = 8443;
+
+// Automatically constructs: https://signportal.<domain>.<tld>:8443
+const portalUrl = client.getPortalUrl(serviceProviderId, portalPort);
+```
+
+#### Troubleshooting
+
+**Error: "Failed to parse URL from " (empty string)**
+- **Cause**: `serviceprovider_id` is empty or undefined in your RODiT configuration
+- **Solution**: Verify your RODiT token has a valid `serviceprovider_id` field
+- **Check**: Run `./infra/roditwallet.sh <private-key> <token-id>` to view token metadata
+
+**Error: "Invalid serviceprovider_id format: missing sc= component"**
+- **Cause**: The `serviceprovider_id` doesn't contain an `sc=` component
+- **Solution**: Ensure your token includes the smart contract identifier
+- **Format**: `bc=near.org;sc=<contract-name>.near;id=...`
+
+**Error: "Invalid domain format in smart contract"**
+- **Cause**: Smart contract name has fewer than 2 components when split by `-`
+- **Solution**: Use format `<domain>-<tld>` or `<number>-<domain>-<tld>`
+- **Valid**: `roditcorp-com.near`, `10975-discernible-org.near`
+- **Invalid**: `roditcorp.near`, `mycontract.near`
+
+#### Configuration Verification
+
+To verify your SignPortal URL configuration:
+
+```javascript
+const client = req.app.locals.roditClient;
+const logger = client.getLogger();
+
+try {
+  const configObject = await client.getConfigOwnRodit();
+  const serviceProviderId = configObject.own_rodit.metadata.serviceprovider_id;
+  
+  logger.info('RODiT Configuration', {
+    component: 'SignPortal',
+    serviceProviderId,
+    hasServiceProviderId: !!serviceProviderId
+  });
+  
+  if (serviceProviderId) {
+    const portalUrl = client.getPortalUrl(serviceProviderId, 8443);
+    logger.info('SignPortal URL constructed', {
+      component: 'SignPortal',
+      portalUrl
+    });
+  }
+} catch (error) {
+  logger.error('SignPortal URL construction failed', {
+    component: 'SignPortal',
+    error: error.message
+  });
+}
 ```
 
 ### CRUDA Operations Example
