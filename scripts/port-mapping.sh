@@ -113,7 +113,7 @@ add_rules() {
 # Function to remove iptables rules
 remove_rules() {
     echo "Removing port mapping: $SOURCE_PORT -> $DEST_PORT"
-    
+
     # Remove PREROUTING rule
     iptables -t nat -D PREROUTING -p tcp --dport $SOURCE_PORT -j REDIRECT --to-port $DEST_PORT 2>/dev/null || true
     
@@ -126,6 +126,69 @@ remove_rules() {
     iptables -t nat -D OUTPUT -p tcp --dport $DEST_PORT -j REDIRECT --to-port $SOURCE_PORT 2>/dev/null || true
     
     echo "Port mapping disabled: $SOURCE_PORT -> $DEST_PORT"
+}
+
+# Function to manage UFW before.rules for NAT redirects
+# Parameters: action (enable|disable), source_port, dest_port
+manage_ufw_rules() {
+    local action=$1
+    local src_port=$2
+    local dst_port=$3
+    local ufw_before_rules="/etc/ufw/before.rules"
+    local temp_file="${ufw_before_rules}.tmp"
+
+    if [ ! -f "$ufw_before_rules" ]; then
+        echo "Error: UFW before.rules file not found at $ufw_before_rules"
+        return 1
+    fi
+
+    cp "$ufw_before_rules" "${ufw_before_rules}.backup-$(date +%Y%m%d-%H%M%S)"
+
+    local nat_rules=""
+    if [ "$action" = "enable" ]; then
+        nat_rules="-A PREROUTING -p tcp -m tcp --dport $src_port -j REDIRECT --to-ports $dst_port
+-A OUTPUT -d 127.0.0.1/32 -p tcp -m tcp --dport $src_port -j REDIRECT --to-ports $dst_port"
+    fi
+
+    awk '
+        BEGIN { in_nat=0; skip=0 }
+        /^# NAT rules managed by port-mapping.sh/ { skip=1; next }
+        /^\*nat/ { in_nat=1; skip=1; next }
+        /^COMMIT/ && in_nat { in_nat=0; skip=1; next }
+        in_nat { skip=1; next }
+        !skip { print }
+        { skip=0 }
+    ' "$ufw_before_rules" > "$temp_file"
+
+    if [ -n "$nat_rules" ]; then
+        local insert_line
+        insert_line=$(grep -n "^\*filter" "$temp_file" | head -1 | cut -d: -f1)
+
+        if [ -n "$insert_line" ]; then
+            {
+                head -n $((insert_line - 1)) "$temp_file"
+                echo "# NAT rules managed by port-mapping.sh"
+                echo "*nat"
+                echo ":PREROUTING ACCEPT [0:0]"
+                echo ":POSTROUTING ACCEPT [0:0]"
+                echo ":OUTPUT ACCEPT [0:0]"
+                echo ""
+                echo "$nat_rules"
+                echo ""
+                echo "COMMIT"
+                echo ""
+                tail -n +$insert_line "$temp_file"
+            } > "${temp_file}.final"
+            mv "${temp_file}.final" "$temp_file"
+        fi
+    fi
+
+    mv "$temp_file" "$ufw_before_rules"
+
+    echo "Reloading UFW to apply changes..."
+    ufw reload > /dev/null 2>&1
+    echo "UFW rules updated and reloaded"
+    return 0
 }
 
 # Function to remove ALL redirect rules for a given source port (cleanup conflicting rules)
@@ -166,7 +229,11 @@ cleanup_all_source_port_rules() {
 
 # Function to save iptables rules permanently
 save_permanent() {
-    if command -v iptables-save &> /dev/null && command -v netfilter-persistent &> /dev/null; then
+    if command -v ufw &> /dev/null && ufw status | grep -q "Status: active"; then
+        echo "UFW is active - delegating persistence to UFW..."
+        manage_ufw_rules "$SAVE_ACTION" "$SOURCE_PORT" "$DEST_PORT"
+        return $?
+    elif command -v iptables-save &> /dev/null && command -v netfilter-persistent &> /dev/null; then
         echo "Saving iptables rules with netfilter-persistent..."
         netfilter-persistent save
     elif command -v iptables-save &> /dev/null && [ -d /etc/iptables ]; then
@@ -188,25 +255,32 @@ case "$ACTION" in
     enable)
         # Clean up ALL existing rules for the source port to avoid conflicts
         cleanup_all_source_port_rules $SOURCE_PORT
-        
-        # Add new rules
-        add_rules
-        
-        # Save permanently if requested
-        if [ "$MODE" = "permanent" ]; then
+
+        if [ "$MODE" = "permanent" ] && command -v ufw &> /dev/null && ufw status | grep -q "Status: active"; then
+            SAVE_ACTION="enable"
             save_permanent
             echo "Port mapping is now permanent (survives reboot)"
         else
-            echo "Port mapping is temporary (will be lost on reboot)"
+            # Add new rules immediately for temporary mode or non-UFW environments
+            add_rules
+
+            if [ "$MODE" = "permanent" ]; then
+                SAVE_ACTION="enable"
+                save_permanent
+                echo "Port mapping is now permanent (survives reboot)"
+            else
+                echo "Port mapping is temporary (will be lost on reboot)"
+            fi
         fi
         ;;
         
     disable)
         # Remove rules
         remove_rules
-        
+
         # Save permanently if requested
         if [ "$MODE" = "permanent" ]; then
+            SAVE_ACTION="disable"
             save_permanent
             echo "Port mapping removal is now permanent"
         else
