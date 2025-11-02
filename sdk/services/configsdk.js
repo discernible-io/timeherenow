@@ -136,10 +136,25 @@ function has(pathStr) {
  * @returns {*} Configuration value
  */
 function get(pathStr, defaultValue) {
+  // Priority 1: Check environment variables directly
+  // This ensures GitHub Actions env vars always take precedence
+  const envVarName = pathStr.toUpperCase().replace(/\./g, '_');
+  const envValue = process.env[envVarName];
+  if (envValue !== undefined) {
+    // Parse numeric strings to numbers if they look like numbers
+    if (/^\d+$/.test(envValue)) {
+      return parseInt(envValue, 10);
+    }
+    // Parse boolean strings
+    if (envValue === 'true') return true;
+    if (envValue === 'false') return false;
+    return envValue;
+  }
+  
+  // Priority 2: Try to get from host config (which may have its own env var mappings)
   let hostValue;
   let hostHasValue = false;
   
-  // First try to get from host config
   if (nodeConfig) {
     try {
       hostValue = nodeConfig.get(pathStr);
@@ -154,13 +169,13 @@ function get(pathStr, defaultValue) {
     return hostValue;
   }
   
-  // Try fallback defaults
+  // Priority 3: Try SDK fallback defaults
   const fallbackValue = deepGet(FALLBACK_DEFAULTS, pathStr);
   if (fallbackValue !== undefined) {
     return fallbackValue;
   }
   
-  // If default value provided, return it
+  // Priority 4: If default value provided, return it
   if (defaultValue !== undefined) {
     return defaultValue;
   }
