@@ -117,6 +117,7 @@ jobs:
             echo 'DEBUG: SERVICE_NAME=${{ vars.SERVICE_NAME }}'
             echo 'DEBUG: SERVERPORT=${{ vars.SERVERPORT }}'
             echo 'DEBUG: API_DEFAULT_OPTIONS_LOG_DIR=${{ vars.API_DEFAULT_OPTIONS_LOG_DIR }}'
+            echo 'DEBUG: NEAR_RPC_URL=${{ env.NEAR_RPC_URL }}'
             echo 'DEBUG: NEAR_CONTRACT_ID=${{ vars.NEAR_CONTRACT_ID }}'
             echo 'DEBUG: NEAR_CREDENTIALS_FILE_PATH=${{ vars.NEAR_CREDENTIALS_FILE_PATH }}'
             echo 'DEBUG: MINTING_FEEACCOUNT=${{ vars.MINTING_FEEACCOUNT }}'
