@@ -424,12 +424,11 @@ RODiT token minting endpoint for creating new client tokens.
   "tobesignedValues": {
     "not_after": "string (ISO 8601 timestamp)",
     "max_requests": "number",
-    "maxrq_window": "number",
+    "maxrq_window": "number (seconds)",
     "permissioned_routes": "string (JSON)",
     "serviceprovider_signature": "string"
   },
-  "mintingfee": "string",
-  "mintingfeeaccount": "string"
+  "mintingfee": "string (calculated fee in NEAR)"
 }
 ```
 
@@ -440,6 +439,101 @@ RODiT token minting endpoint for creating new client tokens.
   "fee_signature_base64url": "string"
 }
 ```
+
+**Error Response (400 - Fee Mismatch)**:
+```json
+{
+  "error": "Minting fee mismatch",
+  "details": {
+    "message": "The minting fee provided does not match the server's calculation",
+    "clientFee": "0.1",
+    "serverFee": "0.15",
+    "breakdown": {
+      "baseFee": 0.1,
+      "maxRequests": 100,
+      "maxrqWindow": 3600,
+      "numberofrodit": 1,
+      "requestsMultiplier": 1,
+      "windowMultiplier": 1,
+      "daysMultiplier": 1.5,
+      "feeMultiplier": 1.5
+    }
+  },
+  "requestId": "01HQXYZ..."
+}
+```
+
+###### Minting Fee Calculation
+
+The minting fee is **calculated on both frontend and backend** using the same formula. The backend validates that the fee matches before proceeding with token minting.
+
+**Formula**:
+```
+totalFee = baseFee × (maxRequests/100) × (3600/maxrqWindow) × (daysUntilExpiry/365) × numberofrodit
+```
+
+**Components**:
+- `baseFee` - Base fee per token (from `MINTING_FEE` environment variable, e.g., "0.1" NEAR)
+- `maxRequests` - Maximum requests allowed per window
+- `maxrqWindow` - Request window in seconds (baseline: 3600 = 1 hour)
+- `daysUntilExpiry` - Days from now until the token expires (baseline: 365 = 1 year)
+- `numberofrodit` - Number of RODiT tokens (fixed at 1 per request)
+
+**Frontend Implementation** (JavaScript):
+```javascript
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function calculateMintingFee({ maxRequests, maxrqWindow, notAfter }) {
+  const baseFee = Number(process.env.REACT_APP_MINTING_FEE); // Must match backend
+  const mr = Number(maxRequests);
+  const mw = Number(maxrqWindow);
+  
+  // Calculate days until expiry
+  const expiryDate = new Date(notAfter);
+  const today = new Date();
+  const diffMs = expiryDate - today;
+  const daysUntilExpiry = Math.ceil(diffMs / ONE_DAY_MS);
+  
+  // Calculate fee (numberofrodit is always 1)
+  const feeMultiplier = (mr / 100) * (3600 / mw) * (daysUntilExpiry / 365);
+  const totalFee = baseFee * feeMultiplier;
+  
+  return totalFee.toString();
+}
+```
+
+**Backend Module**: `src/utils/fee-calculator.js`
+```javascript
+const { calculateMintingFee, getMintingFeeAccount } = require('../utils/fee-calculator');
+
+const feeCalculation = calculateMintingFee({
+  maxRequests: 100,
+  maxrqWindow: 3600,
+  notAfter: '2026-01-01T00:00:00Z',
+  numberofrodit: 1
+});
+// Returns: { totalFee, perRoditFee, daysUntilExpiry, breakdown }
+```
+
+**Configuration**:
+```bash
+# Environment variables (must match on frontend and backend)
+MINTING_FEE=0.1                    # Base fee in NEAR
+MINTING_FEEACCOUNT=fees.near       # Account receiving fees
+```
+
+**Examples**:
+- **Baseline** (100 req/hr, 1 year): `0.1 × 1 × 1 × 1 = 0.1 NEAR`
+- **High volume** (1000 req/hr, 1 year): `0.1 × 10 × 1 × 1 = 1.0 NEAR`
+- **Short duration** (100 req/hr, 30 days): `0.1 × 1 × 1 × 0.082 ≈ 0.0082 NEAR`
+- **High frequency** (100 req/min, 1 year): `0.1 × 1 × 60 × 1 = 6.0 NEAR`
+
+**Critical Requirements**:
+1. Frontend and backend must use **identical** `MINTING_FEE` values
+2. Same formula and calculation order
+3. Display calculated fee to user before submission
+4. Handle fee mismatch errors gracefully
+5. Validation tolerance: 0.000001 NEAR (for floating-point precision)
 
 ##### POST /api/sign/hash
 Sign a base64url-encoded hash concatenated with the latest NEAR timestamp, likely_time_difference_ms, and public key.

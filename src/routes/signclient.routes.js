@@ -7,6 +7,7 @@ const { logger, roditManager } = require("@rodit/rodit-auth-be");
 // login_portal method is now available on the RoditClient instance stored in app.locals
 const { createLogContext, logErrorWithMetrics } = logger;
 const config = require('config');
+const { calculateMintingFee, getMintingFeeAccount } = require('../utils/fee-calculator');
 
 async function signPortalRodit(
   port,
@@ -191,30 +192,38 @@ router.post("/signclient", async (req, res) => {
       
       return res.status(400).json({
         error: "Request body is missing or malformed",
-        details: "Expected JSON body with tobesignedValues, mintingfee, and mintingfeeaccount",
+        details: "Expected JSON body with tobesignedValues and mintingfee",
         requestId,
         contentType: req.get('Content-Type')
       });
     }
 
     // Get data from frontend
-    const { tobesignedValues, mintingfee, mintingfeeaccount } = req.body;
+    const { tobesignedValues, mintingfee: clientMintingFee } = req.body;
 
     // Enhanced context with request validation
     const validationContext = {
       ...baseContext,
       hasSignedValues: !!tobesignedValues,
-      hasMintingFee: !!mintingfee,
-      hasMintingFeeAccount: !!mintingfeeaccount,
+      hasClientMintingFee: !!clientMintingFee,
       bodySize: req.body ? JSON.stringify(req.body).length : 0
     };
 
     // Basic validation
-    if (!tobesignedValues || !mintingfee || !mintingfeeaccount) {
+    if (!tobesignedValues) {
       logger.warnWithContext("Missing required fields in signclient request", validationContext);
 
       return res.status(400).json({
-        error: "Missing required fields",
+        error: "Missing required field: tobesignedValues",
+        requestId,
+      });
+    }
+
+    if (!clientMintingFee) {
+      logger.warnWithContext("Missing mintingfee in signclient request", validationContext);
+
+      return res.status(400).json({
+        error: "Missing required field: mintingfee",
         requestId,
       });
     }
@@ -347,6 +356,74 @@ router.post("/signclient", async (req, res) => {
         requestId: req.requestId
       });
     }
+
+    // Calculate minting fee on backend and validate against client's calculation
+    let feeCalculation;
+    try {
+      feeCalculation = calculateMintingFee({
+        maxRequests: tobesignedValues.max_requests,
+        maxrqWindow: tobesignedValues.maxrq_window,
+        notAfter: tobesignedValues.not_after,
+        numberofrodit: 1
+      });
+      
+      logger.infoWithContext("Calculated minting fee", {
+        ...baseContext,
+        serverTotalFee: feeCalculation.totalFee,
+        clientTotalFee: clientMintingFee,
+        perRoditFee: feeCalculation.perRoditFee,
+        daysUntilExpiry: feeCalculation.daysUntilExpiry,
+        numberofrodit: feeCalculation.breakdown.numberofrodit
+      });
+      
+      logger.debugWithContext("Fee calculation breakdown", {
+        ...baseContext,
+        breakdown: feeCalculation.breakdown
+      });
+    } catch (error) {
+      logger.errorWithContext("Failed to calculate minting fee", {
+        ...baseContext,
+        error: error.message,
+        maxRequests: tobesignedValues.max_requests,
+        maxrqWindow: tobesignedValues.maxrq_window,
+        notAfter: tobesignedValues.not_after
+      });
+      
+      return res.status(400).json({
+        error: "Invalid fee calculation parameters",
+        details: error.message,
+        requestId
+      });
+    }
+    
+    // Validate that client's fee matches server's calculation
+    const serverFee = parseFloat(feeCalculation.totalFee);
+    const clientFee = parseFloat(clientMintingFee);
+    const feeTolerance = 0.000001; // Allow tiny floating-point differences
+    
+    if (Math.abs(serverFee - clientFee) > feeTolerance) {
+      logger.errorWithContext("Minting fee mismatch", {
+        ...baseContext,
+        serverFee,
+        clientFee,
+        difference: Math.abs(serverFee - clientFee),
+        breakdown: feeCalculation.breakdown
+      });
+      
+      return res.status(400).json({
+        error: "Minting fee mismatch",
+        details: {
+          message: "The minting fee provided does not match the server's calculation",
+          clientFee: clientMintingFee,
+          serverFee: feeCalculation.totalFee,
+          breakdown: feeCalculation.breakdown
+        },
+        requestId
+      });
+    }
+    
+    const mintingfee = feeCalculation.totalFee;
+    const mintingfeeaccount = getMintingFeeAccount();
 
     const tamperproofedValues = {
       openapijson_url: config_own_rodit.own_rodit.metadata.openapijson_url,
