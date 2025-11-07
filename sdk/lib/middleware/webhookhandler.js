@@ -7,6 +7,7 @@
 // Reusable webhook handler for RODiT SDK
 
 const crypto = require("crypto");
+const https = require("https");
 const config = require('../../services/configsdk');
 const logger = require("../../services/logger");
 const { createLogContext, logErrorWithMetrics, infoWithContextIf, errorWithContextIf } = logger;
@@ -777,14 +778,38 @@ function createWebhookHandler(stateManager, configuration = {}) {
          );
        }
        
-       // Send webhook request
-       const fetchStartTime = Date.now();
-       const response = await fetch(formattedWebhookUrl, {
-         method: "POST",
-         headers: headers,
-         body: payload,
-       });
-       const fetchDuration = Date.now() - fetchStartTime;
+       // Configure HTTPS agent to skip TLS verification if configured
+      // This is necessary when webhook destinations use self-signed certificates
+      // Since mutual authentication via digital signatures is already in place,
+      // skipping TLS verification is safe in this context
+      const skipTlsVerify = config.has('WEBHOOK_TLS_SKIP_VERIFY') 
+        ? String(config.get('WEBHOOK_TLS_SKIP_VERIFY')).toLowerCase() === 'true'
+        : false;
+      
+      let fetchOptions = {
+        method: "POST",
+        headers: headers,
+        body: payload,
+      };
+      
+      if (skipTlsVerify) {
+        // Create custom HTTPS agent that accepts self-signed certificates
+        const httpsAgent = new https.Agent({
+          rejectUnauthorized: false
+        });
+        fetchOptions.agent = httpsAgent;
+        
+        logger.debugWithContext("Webhook TLS verification disabled", {
+          ...baseContext,
+          skipTlsVerify: true,
+          reason: "WEBHOOK_TLS_SKIP_VERIFY=true"
+        });
+      }
+      
+      // Send webhook request
+      const fetchStartTime = Date.now();
+      const response = await fetch(formattedWebhookUrl, fetchOptions);
+      const fetchDuration = Date.now() - fetchStartTime;
    
        // Log fetch duration metrics
        logger.metric("webhook_http_request_duration_ms", fetchDuration, {

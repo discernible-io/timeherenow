@@ -116,6 +116,10 @@ const FALLBACK_DEFAULTS = {
   // Higher values = faster but longer window after logout where token may still work
   // Set to 0 to disable caching (always check session state)
   TOKEN_VALIDATION_CACHE_TTL: 5000, // 5 seconds default
+  // Webhook TLS verification configuration
+  // Set to true to skip TLS certificate verification for webhook destinations
+  // This is safe when mutual authentication via digital signatures is in place
+  WEBHOOK_TLS_SKIP_VERIFY: false, // Default to strict TLS verification
   // Default empty permission map so consumers can opt-into permissions as needed
   METHOD_PERMISSION_MAP: {},
 };
