@@ -112,6 +112,7 @@ jobs:
             echo 'DEBUG: LOG_LEVEL=${{ vars.LOG_LEVEL }}'
             echo 'DEBUG: LOKI_URL=${{ vars.LOKI_URL }}'
             echo 'DEBUG: LOKI_TLS_SKIP_VERIFY=${{ vars.LOKI_TLS_SKIP_VERIFY }}'
+            echo 'DEBUG: WEBHOOK_TLS_SKIP_VERIFY=${{ vars.WEBHOOK_TLS_SKIP_VERIFY }}'
             echo 'DEBUG: LOKI_BASIC_AUTH length:' \${#LOKI_BASIC_AUTH}
             echo 'DEBUG: RODIT_NEAR_CREDENTIALS_SOURCE=${{ vars.RODIT_NEAR_CREDENTIALS_SOURCE }}'
             echo 'DEBUG: SERVICE_NAME=${{ vars.SERVICE_NAME }}'
@@ -151,6 +152,7 @@ jobs:
               -e LOG_LEVEL='${{ vars.LOG_LEVEL }}' \
               -e LOKI_URL='${{ vars.LOKI_URL }}' \
               -e LOKI_TLS_SKIP_VERIFY='${{ vars.LOKI_TLS_SKIP_VERIFY }}' \
+              -e WEBHOOK_TLS_SKIP_VERIFY='${{ vars.WEBHOOK_TLS_SKIP_VERIFY }}' \
               -e LOKI_BASIC_AUTH='${{ secrets.LOKI_BASIC_AUTH }}' \
               -e RODIT_NEAR_CREDENTIALS_SOURCE='${{ vars.RODIT_NEAR_CREDENTIALS_SOURCE }}' \
               -e SERVICE_NAME='${{ vars.SERVICE_NAME }}' \
