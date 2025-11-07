@@ -1,5 +1,5 @@
 /**
- * Minting Fee Calculator
+ * Minting Fee Calculator (Backend)
  * 
  * Calculates the minting fee for RODiT tokens based on:
  * - Base fee (from environment)
@@ -8,7 +8,9 @@
  * - Days until expiry
  * - Number of RODiT tokens
  * 
- * Formula: baseFee × (maxRequests/100) × (3600/maxrqWindow) × (daysUntilExpiry/365) × numberofrodit
+ * Formula: baseFee × (maxRequests/100) × (maxrqWindow/3600) × (daysUntilExpiry/365) × numberofrodit
+ * 
+ * IMPORTANT: This formula MUST match the frontend calculation in src/utils/fees.js
  */
 
 const config = require('config');
@@ -78,8 +80,9 @@ function calculateMintingFee({
   const daysUntilExpiry = Math.ceil(diffMs / ONE_DAY_MS);
   
   // Calculate fee multiplier components
+  // FIXED: Match frontend formula - multiply by window, not divide
   const requestsMultiplier = mr / 100;
-  const windowMultiplier = 3600 / mw;
+  const windowMultiplier = mw / 3600;  // ✅ CORRECTED: was 3600 / mw
   const daysMultiplier = daysUntilExpiry / 365;
   
   // Calculate fee per RODiT
