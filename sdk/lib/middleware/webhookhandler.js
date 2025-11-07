@@ -8,6 +8,7 @@
 
 const crypto = require("crypto");
 const https = require("https");
+const { Agent } = require("undici");
 const config = require('../../services/configsdk');
 const logger = require("../../services/logger");
 const { createLogContext, logErrorWithMetrics, infoWithContextIf, errorWithContextIf } = logger;
@@ -793,11 +794,14 @@ function createWebhookHandler(stateManager, configuration = {}) {
       };
       
       if (skipTlsVerify) {
-        // Create custom HTTPS agent that accepts self-signed certificates
-        const httpsAgent = new https.Agent({
-          rejectUnauthorized: false
+        // Create custom undici Agent that accepts self-signed certificates
+        // Node.js fetch uses undici under the hood and requires 'dispatcher' option
+        const undiciAgent = new Agent({
+          connect: {
+            rejectUnauthorized: false
+          }
         });
-        fetchOptions.agent = httpsAgent;
+        fetchOptions.dispatcher = undiciAgent;
         
         logger.debugWithContext("Webhook TLS verification disabled", {
           ...baseContext,
