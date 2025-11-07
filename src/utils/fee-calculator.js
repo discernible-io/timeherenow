@@ -82,7 +82,7 @@ function calculateMintingFee({
   // Calculate fee multiplier components
   // FIXED: Match frontend formula - multiply by window, not divide
   const requestsMultiplier = mr / 100;
-  const windowMultiplier = mw / 3600;  // ✅ CORRECTED: was 3600 / mw
+  const windowMultiplier = 3600 / mw;
   const daysMultiplier = daysUntilExpiry / 365;
   
   // Calculate fee per RODiT
