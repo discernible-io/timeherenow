@@ -2,7 +2,7 @@
 
 **Date**: November 13, 2025  
 **Endpoint**: `POST /api/sign/hash`  
-**Reviewer**: Cascade AI  
+**Reviewer**: Cascade AI.
 **Standards Reviewed**: RFC 3161, RFC 3339, RFC 5816, eIDAS Regulation (EU) No 910/2014
 
 ---
