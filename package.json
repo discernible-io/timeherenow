@@ -16,7 +16,7 @@
   "devDependencies": {
     "nodemon": "^3.1.10"
   },
-  "name": "timeherenow",
+  "name": "timeherenow-rodit",
   "version": "1.0.0",
   "description": "Time Here Now API",
   "main": "src/app.js",
