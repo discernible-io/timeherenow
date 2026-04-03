@@ -40,7 +40,7 @@ const { createUserRateLimitMiddleware } = require("./middleware/user-rate-limit"
         labels: { app: serviceLabel, service_name: serviceLabel, component: "rodit-sdk" },
         json: true,
         level: logLevel,
-        batching: true,
+        batching: false,
         gracefulShutdown: true,
         replaceTimestamp: true,
         timeout: 5000,
