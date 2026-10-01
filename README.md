@@ -1205,3 +1205,9 @@ See [scripts/README-generate-permission-map.md](scripts/README-generate-permissi
 2. **Network Security**: HTTPS-only with strong TLS configuration
 3. **CORS Security**: Strict origin whitelist
 4. **Secrets Management**: HashiCorp Vault integration
+
+<!-- discernible-io:product-links -->
+---
+
+[discernible.io](https://www.discernible.io/) · [Get a Passport](https://purchase.identyclaw.com) · [Verify HOLA](https://verify.identyclaw.com)
+<!-- /discernible-io:product-links -->
