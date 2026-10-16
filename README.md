@@ -995,7 +995,7 @@ See [scripts/README-generate-permission-map.md](scripts/README-generate-permissi
 - **Entry Point**: Starts the API server via `src/app.js`
 
 #### nginx/nginx.Dockerfile - Reverse Proxy Container
-- **Base Image**: `nginx:mainline-alpine` for latest nginx features
+- **Base Image**: `nginx:1.31.7-alpine` (pinned in nginx.Dockerfile)
 - **Configuration**: Uses custom `nginx/nginx.conf`
 - **Security**: Runs as nginx user with restricted permissions
 
